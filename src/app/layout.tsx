@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import ogImage from "./og/og-image.png";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
@@ -23,9 +22,9 @@ export const metadata: Metadata = {
     siteName: "Kongens Nytårstale Bingo",
     images: [
       {
-        url: ogImage.src,
-        width: ogImage.width,
-        height: ogImage.height,
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
         alt: "Kongens Nytårstale Bingo",
       },
     ],
@@ -35,7 +34,7 @@ export const metadata: Metadata = {
     title: "👑 Kongens Nytårstale Bingo 🥂",
     description:
       "Gør Kongens Nytårstale sjovere med bingo! 🎲 Generér en tilfældig bingoplade og spil med familie og venner.",
-    images: [ogImage.src],
+    images: ["/og-image.png"],
   },
 };
 
