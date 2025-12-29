@@ -1,5 +1,5 @@
 import { loadOdds } from "@/lib/odds";
-import Bingo from "./ui/bingo";
+import OnlineBingo from "./ui/online-bingo";
 import { Suspense } from "react";
 
 export default function Home() {
@@ -7,7 +7,7 @@ export default function Home() {
 
   return (
     <Suspense fallback={null}>
-      <Bingo odds={odds} />
+      <OnlineBingo odds={odds} />
     </Suspense>
   );
 }
