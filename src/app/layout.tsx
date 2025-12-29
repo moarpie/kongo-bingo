@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import ogImage from "./og/og-image.png";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
@@ -16,16 +17,25 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "da_DK",
-    title: "Kongens Nytårstale Bingo",
+    title: "👑 Kongens Nytårstale Bingo 🥂",
     description:
       "Gør Kongens Nytårstale sjovere med bingo! 🎲 Generér en tilfældig bingoplade og spil med familie og venner.",
     siteName: "Kongens Nytårstale Bingo",
+    images: [
+      {
+        url: ogImage.src,
+        width: ogImage.width,
+        height: ogImage.height,
+        alt: "Kongens Nytårstale Bingo",
+      },
+    ],
   },
   twitter: {
     card: "summary",
-    title: "Kongens Nytårstale Bingo",
+    title: "👑 Kongens Nytårstale Bingo 🥂",
     description:
       "Gør Kongens Nytårstale sjovere med bingo! 🎲 Generér en tilfældig bingoplade og spil med familie og venner.",
+    images: [ogImage.src],
   },
 };
 
