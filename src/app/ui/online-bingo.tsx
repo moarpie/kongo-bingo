@@ -121,13 +121,13 @@ export default function OnlineBingo({ odds }: { odds: OddsWord[] }) {
               </span>
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <button
-                onClick={() => regenerateBoard()}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-orange-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400 dark:shadow-none dark:focus-visible:outline-amber-400"
-              >
-                <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-                Ny tilfældig plade
-              </button>
+                <button
+                  onClick={() => regenerateBoard()}
+                  className="btn-gold inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:focus-visible:outline-amber-400"
+                >
+                  <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+                  Ny tilfældig plade
+                </button>
               <button
                 onClick={copyLink}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-orange-200 px-4 py-3 text-sm font-semibold text-orange-700 transition hover:bg-orange-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 sm:w-40 dark:border-amber-500/25 dark:bg-white/5 dark:text-amber-200 dark:hover:bg-white/10 dark:focus-visible:outline-amber-400"

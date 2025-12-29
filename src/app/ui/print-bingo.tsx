@@ -148,7 +148,7 @@ export default function PrintBingo({ odds }: { odds: OddsWord[] }) {
 
             <button
               onClick={regenerateAll}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-orange-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400 dark:shadow-none dark:focus-visible:outline-amber-400"
+              className="btn-gold inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:focus-visible:outline-amber-400"
             >
               <RefreshCcw className="h-4 w-4" aria-hidden="true" />
               Bland pladerne
@@ -174,7 +174,7 @@ export default function PrintBingo({ odds }: { odds: OddsWord[] }) {
             </p>
             <button
               onClick={() => setShouldPrint(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-orange-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400 dark:shadow-none dark:focus-visible:outline-amber-400"
+              className="btn-gold inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:focus-visible:outline-amber-400"
             >
               <Printer className="h-4 w-4" aria-hidden="true" />
               Print alle
