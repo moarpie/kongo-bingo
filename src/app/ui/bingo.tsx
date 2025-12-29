@@ -1,8 +1,9 @@
 "use client";
 
-import confetti from "canvas-confetti";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Clipboard, Printer, RefreshCcw, Trash2 } from "lucide-react";
+import JSConfetti from "js-confetti";
 
 import type { OddsWord } from "@/lib/odds";
 
@@ -22,7 +23,7 @@ const MAX_FILLED_PER_ROW = 3;
 
 // Odds-parametre kan redigeres her
 // Alle "normale" udfyldte felter bliver trukket fra dette odd-spænd:
-const ODDS_SPAN_MIN = 2;
+const ODDS_SPAN_MIN = 1;
 const ODDS_SPAN_MAX = 8;
 // Derudover: altid ét felt med "meget lav sandsynlighed" (dvs. høj odds)
 const JACKPOT_ODDS_MIN = 100;
@@ -32,26 +33,34 @@ type Thresholds = {
   mediumMax: number;
 };
 
+const CONFETTI_EMOJIS = ["🎉", "🎊", "🥂", "🍾", "✨", "👑", "🤴", "🇩🇰"] as const;
+
 export default function Bingo({ odds }: { odds: OddsWord[] }) {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const jsConfetti = useMemo(() => new JSConfetti(), []);
 
   const initialSeed = searchParams.get("id") ?? randomSeed();
+  const thresholds = useMemo(
+    () => ({
+      highMax: ODDS_SPAN_MIN + (ODDS_SPAN_MAX - ODDS_SPAN_MIN) * 0.33,
+      mediumMax: ODDS_SPAN_MIN + (ODDS_SPAN_MAX - ODDS_SPAN_MIN) * 0.66,
+    }),
+    [],
+  );
 
   const [seed, setSeed] = useState(initialSeed);
   const [cells, setCells] = useState<BoardCell[]>(() =>
-    buildBoard(
-      odds,
-      initialSeed,
-      {
-        highMax: ODDS_SPAN_MIN + (ODDS_SPAN_MAX - ODDS_SPAN_MIN) * 0.33,
-        mediumMax: ODDS_SPAN_MIN + (ODDS_SPAN_MAX - ODDS_SPAN_MIN) * 0.66,
-      },
-    ),
+    buildBoard(odds, initialSeed, thresholds),
   );
 
   const hasBingo = useMemo(() => checkBingo(cells), [cells]);
-  const counts = useMemo(() => countBuckets(cells), [cells]);
+  const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
+  const [printCount, setPrintCount] = useState(4);
+  const [printJob, setPrintJob] = useState<{
+    seeds: string[];
+    boards: BoardCell[][];
+  } | null>(null);
 
   useEffect(() => {
     // Sikrer at URL altid indeholder det aktive id
@@ -63,23 +72,14 @@ export default function Bingo({ odds }: { odds: OddsWord[] }) {
 
   useEffect(() => {
     if (hasBingo) {
-      fireConfetti();
+      fireConfetti(jsConfetti);
     }
-  }, [hasBingo]);
+  }, [hasBingo, jsConfetti]);
 
   const regenerateBoard = (nextSeed?: string) => {
     const activeSeed = nextSeed ?? randomSeed();
     setSeed(activeSeed);
-    setCells(
-      buildBoard(
-        odds,
-        activeSeed,
-        {
-          highMax: ODDS_SPAN_MIN + (ODDS_SPAN_MAX - ODDS_SPAN_MIN) * 0.33,
-          mediumMax: ODDS_SPAN_MIN + (ODDS_SPAN_MAX - ODDS_SPAN_MIN) * 0.66,
-        },
-      ),
-    );
+    setCells(buildBoard(odds, activeSeed, thresholds));
   };
 
   const copyLink = async () => {
@@ -101,41 +101,118 @@ export default function Bingo({ odds }: { odds: OddsWord[] }) {
     });
   };
 
+  useEffect(() => {
+    if (!printJob) return;
+
+    const handleAfterPrint = () => setPrintJob(null);
+    window.addEventListener("afterprint", handleAfterPrint);
+
+    const frame = window.requestAnimationFrame(() => {
+      window.print();
+    });
+
+    return () => {
+      window.removeEventListener("afterprint", handleAfterPrint);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [printJob]);
+
+  const startPrint = () => {
+    const clamped = Math.max(1, Math.min(50, Math.floor(printCount)));
+    const seeds: string[] = [];
+    const seen = new Set<string>();
+
+    while (seeds.length < clamped) {
+      const next = randomSeed();
+      if (seen.has(next)) continue;
+      seen.add(next);
+      seeds.push(next);
+    }
+
+    setPrintJob({
+      seeds,
+      boards: seeds.map((id) => buildBoard(odds, id, thresholds)),
+    });
+    setIsPrintDialogOpen(false);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-rose-100 text-zinc-900">
-      <div className="mx-auto max-w-6xl px-2 py-8 sm:px-4 sm:py-12 md:px-8 md:py-16">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-rose-100 text-zinc-900 selection:bg-orange-200/70 selection:text-zinc-900 dark:bg-gradient-to-br dark:from-slate-950 dark:via-zinc-950 dark:to-amber-950 dark:text-zinc-50 dark:selection:bg-amber-400/30 dark:selection:text-zinc-50">
+      <div className="print-only hidden bg-white text-black">
+        <div className="mx-auto max-w-[210mm]">
+          {printJob &&
+            Array.from({
+              length: Math.ceil(printJob.boards.length / 2),
+            }).map((_, pageIndex) => {
+              const firstIndex = pageIndex * 2;
+              const secondIndex = firstIndex + 1;
+              const first = printJob.boards[firstIndex];
+              const second = printJob.boards[secondIndex];
+
+              return (
+                <div key={`page-${pageIndex}`} className="break-after-page">
+                  <div className="grid grid-rows-2 gap-6">
+                    <PrintableBoard
+                      seed={printJob.seeds[firstIndex]}
+                      cells={first}
+                    />
+                    {second ? (
+                      <PrintableBoard
+                        seed={printJob.seeds[secondIndex]}
+                        cells={second}
+                      />
+                    ) : (
+                      <div />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      </div>
+
+      <div className="no-print mx-auto max-w-6xl px-2 py-8 sm:px-4 sm:py-12 md:px-8 md:py-16">
         <header className="mb-10 flex flex-col gap-3">
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-orange-500">
+          <p className="text-sm font-medium uppercase tracking-[0.2em] text-orange-600 dark:text-amber-300">
             Konge-bingo
           </p>
           <h1 className="text-3xl font-semibold sm:text-5xl">
-            Bingoplader til kongens nytårstale
+            🥂 Bingoplader til kongens nytårstale 🍾
           </h1>
-          <p className="max-w-3xl text-base text-zinc-700 sm:text-lg">
+          <p className="max-w-3xl text-base text-zinc-700 sm:text-lg dark:text-zinc-300">
             Pladen er 3 rækker x 4 kolonner. Hver række udfyldes tilfældigt med
             2-3 felter; URL&apos;ens id genskaber samme plade.
           </p>
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[340px,1fr]">
-          <section className="space-y-6 rounded-2xl bg-white/70 p-6 shadow-lg shadow-orange-100 backdrop-blur">
-
+          <section className="space-y-6 rounded-2xl bg-white/70 p-6 shadow-lg shadow-orange-100 backdrop-blur dark:border dark:border-amber-500/15 dark:bg-white/5 dark:shadow-none">
+            <h2 className="text-xl font-semibold">Plade</h2>
             <div className="space-y-3">
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button
                   onClick={() => regenerateBoard()}
-                  className="w-full rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-orange-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-orange-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400 dark:shadow-none dark:focus-visible:outline-amber-400"
                 >
+                  <RefreshCcw className="h-4 w-4" aria-hidden="true" />
                   Ny tilfældig plade
                 </button>
                 <button
                   onClick={copyLink}
-                  className="w-full rounded-xl border border-orange-200 px-4 py-3 text-sm font-semibold text-orange-700 transition hover:bg-orange-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 sm:w-40"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-orange-200 px-4 py-3 text-sm font-semibold text-orange-700 transition hover:bg-orange-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 sm:w-40 dark:border-amber-500/25 dark:bg-white/5 dark:text-amber-200 dark:hover:bg-white/10 dark:focus-visible:outline-amber-400"
                 >
+                  <Clipboard className="h-4 w-4" aria-hidden="true" />
                   Kopiér link
                 </button>
               </div>
-              <p className="text-xs text-zinc-600">
+              <button
+                onClick={() => setIsPrintDialogOpen(true)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-orange-200 px-4 py-3 text-sm font-semibold text-orange-700 transition hover:bg-orange-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-amber-500/25 dark:bg-white/5 dark:text-amber-200 dark:hover:bg-white/10 dark:focus-visible:outline-amber-400"
+              >
+                <Printer className="h-4 w-4" aria-hidden="true" />
+                Print plader
+              </button>
+              <p className="text-xs text-zinc-600 dark:text-zinc-400">
                 Del linket for at dele præcis samme plade. Nye plader får et nyt
                 id i URL&apos;en.
               </p>
@@ -155,27 +232,28 @@ export default function Bingo({ odds }: { odds: OddsWord[] }) {
           </section>
 
           <section className="space-y-6">
-            <div className="flex flex-col gap-3 rounded-2xl border border-orange-100 bg-white/80 p-3 shadow-lg shadow-orange-100 backdrop-blur sm:p-6">
+            <div className="flex flex-col gap-3 rounded-2xl border border-orange-100 bg-white/80 p-3 shadow-lg shadow-orange-100 backdrop-blur sm:p-6 dark:border-amber-500/15 dark:bg-white/5 dark:shadow-none">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-orange-700">
+                  <p className="text-sm font-medium text-orange-700 dark:text-amber-200">
                     URL id: <span className="font-semibold">{seed}</span>
                   </p>
-                  <p className="text-xs text-zinc-600">
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400">
                     Klik på udfyldte felter for at markere dem. Bingo giver
                     konfetti.
                   </p>
                 </div>
                 <button
                   onClick={() => regenerateBoard(seed)}
-                  className="rounded-lg border border-orange-200 px-3 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-200 px-3 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-amber-500/25 dark:bg-white/5 dark:text-amber-200 dark:hover:bg-white/10 dark:focus-visible:outline-amber-400"
                 >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
                   Ryd pladen
                 </button>
               </div>
 
               <div
-                className="grid gap-1 rounded-2xl bg-gradient-to-b from-orange-50 to-white shadow-inner sm:gap-2 p-1 sm:p-3"
+                className="grid gap-1 rounded-2xl bg-gradient-to-b from-orange-50 to-white p-1 shadow-inner sm:gap-2 sm:p-3 dark:from-white/10 dark:to-white/5 dark:shadow-none"
                 style={{
                   gridTemplateColumns: `repeat(${BOARD_COLS}, minmax(0, 1fr))`,
                 }}
@@ -185,13 +263,13 @@ export default function Bingo({ odds }: { odds: OddsWord[] }) {
                     key={`${cell.word}-${index}`}
                     onClick={() => toggleCell(index)}
                     disabled={cell.empty}
-                    className={`relative flex min-h-[72px] flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-center text-sm font-semibold transition shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:min-h-[88px] sm:px-2 sm:py-3 ${
+                    className={`relative flex min-h-[72px] flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-center text-sm font-semibold transition shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:min-h-[88px] sm:px-2 sm:py-3 dark:shadow-none ${
                       cell.empty
-                        ? "border-zinc-200 bg-zinc-200 text-zinc-200"
-                        : "border-zinc-200 bg-white text-zinc-900"
+                        ? "border-zinc-200 bg-zinc-100 text-zinc-200 dark:border-white/10 dark:bg-white/5 dark:text-white/5"
+                        : "border-zinc-200 bg-white text-zinc-900 dark:border-white/10 dark:bg-white/5 dark:text-zinc-50"
                     } ${
                       cell.marked && !cell.empty
-                        ? "kb-pop ring-2 ring-offset-2 ring-orange-500"
+                        ? "kb-pop ring-2 ring-offset-2 ring-orange-500 dark:ring-amber-400 dark:ring-offset-zinc-950"
                         : ""
                     } ${cell.empty ? "cursor-not-allowed opacity-60" : ""}`}
                   >
@@ -210,7 +288,7 @@ export default function Bingo({ odds }: { odds: OddsWord[] }) {
                         <span className="w-full whitespace-normal break-words text-[13px] leading-tight sm:text-base">
                           {cell.word}
                         </span>
-                        <span className="inline-flex items-center gap-2 text-[11px] font-medium text-zinc-700 sm:text-xs">
+                        <span className="inline-flex items-center gap-2 text-[11px] font-medium text-zinc-700 sm:text-xs dark:text-zinc-300">
                           <span
                             className={`h-2 w-2 rounded-full ${
                               cell.bucket === "grøn"
@@ -231,8 +309,129 @@ export default function Bingo({ odds }: { odds: OddsWord[] }) {
             </div>
           </section>
         </div>
+
+        <footer className="mt-10 text-xs text-zinc-600 dark:text-zinc-400">
+          Odds kommer fra{" "}
+          <a
+            href="https://danskespil.dk/oddset/sports/competition/25652/kongens-nytarstale/danmark/danmark-kongens-nytarstale/outrights"
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-orange-700 underline decoration-orange-200 underline-offset-2 hover:text-orange-800 dark:text-amber-200 dark:decoration-amber-500/30 dark:hover:text-amber-100"
+          >
+            Danskespil Oddset
+          </a>
+          .
+        </footer>
       </div>
+
+      {isPrintDialogOpen && (
+        <div
+          className="no-print fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Print plader"
+          onClick={() => setIsPrintDialogOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl dark:border dark:border-amber-500/20 dark:bg-zinc-950 dark:shadow-none"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+              Print plader
+            </h2>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+              Vælg hvor mange plader du vil printe. Der er 2 plader per A4 side.
+            </p>
+
+            <div className="mt-4 flex items-center gap-3">
+              <label
+                className="text-sm font-medium text-zinc-800 dark:text-zinc-200"
+                htmlFor="count"
+              >
+                Antal
+              </label>
+              <input
+                id="count"
+                inputMode="numeric"
+                type="number"
+                min={1}
+                max={50}
+                value={printCount}
+                onChange={(event) => setPrintCount(Number(event.target.value))}
+                className="w-24 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-50 dark:focus-visible:outline-amber-400"
+              />
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                (A4 sider: {Math.ceil(Math.max(1, printCount) / 2)})
+              </span>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                onClick={() => setIsPrintDialogOpen(false)}
+                className="w-full rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 sm:w-auto dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10 dark:focus-visible:outline-amber-400"
+              >
+                Annuller
+              </button>
+              <button
+                onClick={startPrint}
+                className="w-full rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-orange-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 sm:w-auto dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400 dark:shadow-none dark:focus-visible:outline-amber-400"
+              >
+                Print
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function PrintableBoard({ seed, cells }: { seed: string; cells: BoardCell[] }) {
+  return (
+    <section className="rounded-xl border border-zinc-200 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-600">
+            Konge-bingo
+          </p>
+          <p className="text-sm font-semibold text-zinc-900">
+            Bingoplade (id: {seed})
+          </p>
+        </div>
+        <div className="text-right text-[10px] text-zinc-500">
+          3×4 felter • 2-3 per række
+        </div>
+      </div>
+
+      <div
+        className="mt-3 grid gap-2"
+        style={{
+          gridTemplateColumns: `repeat(${BOARD_COLS}, minmax(0, 1fr))`,
+        }}
+      >
+        {cells.map((cell, index) => (
+          <div
+            key={`${seed}-${index}`}
+            className={`flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2 text-center text-xs font-semibold ${
+              cell.empty
+                ? "border-zinc-200 bg-zinc-100 text-zinc-100"
+                : "border-zinc-300"
+            }`}
+          >
+            {cell.empty ? (
+              <span className="sr-only">Tomt felt</span>
+            ) : (
+              <>
+                <span className="leading-tight">{cell.word}</span>
+                <span className="text-[10px] font-medium text-zinc-600">
+                  Odds: {cell.odds.toFixed(2)}
+                </span>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -383,28 +582,6 @@ function pickThreeNonContiguous(colCounts: number[], rng: () => number) {
     : optionMissing2.cols;
 }
 
-function countBuckets(cells: BoardCell[]) {
-  let green = 0;
-  let yellow = 0;
-  let jackpot = 0;
-  let empty = 0;
-
-  cells.forEach((cell) => {
-    if (cell.empty) {
-      empty += 1;
-    } else if (cell.bucket === "grøn") {
-      green += 1;
-    } else if (cell.bucket === "gul") {
-      yellow += 1;
-    } else {
-      jackpot += 1;
-    }
-  });
-
-  const filled = cells.length - empty;
-  return { green, yellow, jackpot, empty, filled };
-}
-
 function draw<T>(list: T[], count: number, rng: () => number): T[] {
   const pool = shuffle(list, rng);
   return pool.slice(0, Math.min(count, pool.length));
@@ -481,35 +658,10 @@ function isLineComplete(cells: BoardCell[], indexes: number[]) {
   return filledIndexes.every((idx) => cells[idx].marked);
 }
 
-function fireConfetti() {
-  const bursts = 4;
-  const duration = 1500;
-  const end = Date.now() + duration;
-
-  const frame = () => {
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.7 },
-    });
-    if (Date.now() < end) {
-      requestAnimationFrame(frame);
-    }
-  };
-
-  for (let i = 0; i < bursts; i += 1) {
-    setTimeout(
-      () =>
-        confetti({
-          particleCount: 160,
-          startVelocity: 35,
-          spread: 90,
-          ticks: 200,
-          origin: { x: Math.random(), y: Math.random() * 0.3 + 0.2 },
-        }),
-      i * 200,
-    );
-  }
-
-  requestAnimationFrame(frame);
+function fireConfetti(jsConfetti: JSConfetti) {
+  void jsConfetti.addConfetti({
+    emojis: [...CONFETTI_EMOJIS],
+    emojiSize: 56,
+    confettiNumber: 48,
+  });
 }
